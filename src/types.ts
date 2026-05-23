@@ -1,21 +1,29 @@
-export type SkillTier = 'Standard' | 'Advanced';
-
 export interface UserProfile {
+  email: string;
   name: string;
   grade: string;
-  balance: number; // In Hourglass Credits
-  strengths: string[]; // Subjects they can teach
-  needs: string[]; // Subjects they need help with
+  balance: number;
+  strengths: string[];
+  needs: string[];
 }
 
 export interface MarketplacePost {
   id: string;
+  creatorEmail: string;
   studentName: string;
   subject: string;
-  tier: SkillTier;
-  cost: number; // 1.0 or 1.5 credits per hour
+  tier: 'Standard' | 'Advanced';
+  cost: number;
   type: 'Offer' | 'Request';
   description: string;
+  // --- NEW COMPLEX DEAL PARAMETERS ---
+  lessonContent: string;
+  maxStudents: number;
+  timeLengthMinutes: number;
+  scheduledDay: string;
+  status: 'pending' | 'confirmed';
+  acceptedByEmail?: string; // Tracks who joined or who requested to learn/teach
+  acceptedByName?: string;
 }
 
 export interface Transaction {
@@ -27,12 +35,6 @@ export interface Transaction {
   timestamp: string;
 }
 
-export interface SessionReview {
-  rating: number; // 1 to 5 stars
-  comment: string;
-}
-
-// Track current active escrow sessions
 export interface EscrowSession {
   id: string;
   postId: string;
@@ -41,5 +43,14 @@ export interface EscrowSession {
   subject: string;
   cost: number;
   durationSeconds: number;
-  status: 'active' | 'completed_pending_review' | 'finalized';
+  status: 'active' | 'completed_pending_review';
+}
+
+// System notification blueprint for multi-user coordination simulation
+export interface AppNotification {
+  id: string;
+  message: string;
+  type: 'alert' | 'success' | 'request';
+  timestamp: string;
+  associatedPostId?: string;
 }

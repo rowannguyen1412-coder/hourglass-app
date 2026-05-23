@@ -1,466 +1,645 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { UserProfile, MarketplacePost, Transaction, EscrowSession } from '../types';
-import { initialProfile, initialPosts, initialTransactions } from '../mockData';
+import { useState } from 'react';
+import { UserProfile, MarketplacePost, AppNotification, Transaction } from '../types';
+
+// ==========================================
+// ACCOUNT A CONFIGURATION (FALLBACK SEED)
+// ==========================================
+const DEFAULT_TEST_ACCOUNT: UserProfile = {
+  name: "Alex Rivera",
+  email: "alex@school.edu",
+  grade: "Grade 11",
+  balance: 3.5,
+  strengths: ["Advanced Math", "Chemistry Basics"],
+  needs: ["Physics Basics", "History Review"]
+};
+
+// AVAILABLE PRESET SUBJECTS FOR DROPDOWN
+const SUBJECT_OPTIONS = [
+  "Advanced Math",
+  "Coding",
+  "Basic Photography",
+  "Physics Basics",
+  "Chemistry Basics",
+  "History Review",
+  "Guitar",
+  "Public Speaking"
+];
 
 export default function HourglassDashboard() {
-  // ----------------------------------------
-  // 1. STATE & PERSISTENCE MANAGEMENT
-  // ----------------------------------------
-  const [profile, setProfile] = useState<UserProfile>(initialProfile);
-  const [posts, setPosts] = useState<MarketplacePost[]>(initialPosts);
-  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
-  const [activeSession, setActiveSession] = useState<EscrowSession | null>(null);
-  
-  // Feed Filtering state: 'All' | 'Offer' | 'Request'
+  // --- CORE SYSTEM STATES ---
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [feedFilter, setFeedFilter] = useState<'All' | 'Offer' | 'Request'>('All');
-  
-  // Timer tracking states
-  const [timerLeft, setTimerLeft] = useState<number>(0);
-  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
-  
-  // Quality Control Review Modal states
-  const [showReviewModal, setShowReviewModal] = useState<boolean>(false);
-  const [rating, setRating] = useState<number>(5);
-  const [comment, setComment] = useState<string>('');
 
-  // Load from LocalStorage on mount
-  useEffect(() => {
-    const savedProfile = localStorage.getItem('hg_profile');
-    const savedPosts = localStorage.getItem('hg_posts');
-    const savedTransactions = localStorage.getItem('hg_transactions');
-    
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
-    if (savedPosts) setPosts(JSON.parse(savedPosts));
-    if (savedTransactions) setTransactions(JSON.parse(savedTransactions));
-  }, []);
+  // --- NEW LISTING FORM STATES ---
+  const [postSubject, setPostSubject] = useState('');
+  const [postTier, setPostTier] = useState<'Standard' | 'Advanced'>('Standard');
+  const [postCost, setPostCost] = useState(1.0);
+  const [postType, setPostType] = useState<'Offer' | 'Request'>('Offer');
+  const [postDescription, setPostDescription] = useState('');
+  const [postDuration, setPostDuration] = useState('60 Mins (Standard)');
+  const [postSchedule, setPostSchedule] = useState('Monday afternoon');
 
-  // Save changes to LocalStorage helper
-  const saveToStorage = (newProfile: UserProfile, newPosts: MarketplacePost[], newTx: Transaction[]) => {
-    localStorage.setItem('hg_profile', JSON.stringify(newProfile));
-    localStorage.setItem('hg_posts', JSON.stringify(newPosts));
-    localStorage.setItem('hg_transactions', JSON.stringify(newTx));
-  };
-
-  // ----------------------------------------
-  // 2. LIVE COUNTDOWN TIMER LOGIC
-  // ----------------------------------------
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isTimerRunning && timerLeft > 0) {
-      interval = setInterval(() => {
-        setTimerLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (timerLeft === 0 && isTimerRunning) {
-      setIsTimerRunning(false);
-      // When timer hits 0, trigger the "Verify Session" pending state
-      if (activeSession) {
-        setActiveSession({ ...activeSession, status: 'completed_pending_review' });
-      }
+  // --- MOCK DATABASE COLLECTIONS ---
+  const [posts, setPosts] = useState<MarketplacePost[]>([
+    {
+      id: "post-1",
+      studentName: "Chloe Zhang",
+      creatorEmail: "chloe@school.edu",
+      subject: "Physics Basics: Motion",
+      tier: "Standard",
+      cost: 1.0,
+      type: "Request",
+      description: "Struggling with speed and acceleration formulas. Need someone to go over the practice worksheet with me!",
+      duration: "60 Mins (Standard)",
+      scheduledDay: "Friday afternoon",
+      status: "open"
+    },
+    {
+      id: "post-2",
+      studentName: "Marcus Vance",
+      creatorEmail: "marcus@school.edu",
+      subject: "Advanced Math: Derivatives",
+      tier: "Advanced",
+      cost: 1.5,
+      type: "Offer",
+      description: "I can teach quick rules for optimization problems. Clear examples provided.",
+      duration: "60 Mins (Standard)",
+      scheduledDay: "Monday afternoon",
+      status: "open"
     }
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timerLeft, activeSession]);
+  ]);
 
-  // Format seconds to MM:SS
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    { id: "tx-1", details: "Basic Photography Setup", type: "earn", amount: 1.0, peer: "Leo Cooper", timestamp: "2 hours ago" },
+    { id: "tx-2", details: "History Review Session", type: "spend", amount: 1.5, peer: "Emily Blunt", timestamp: "Yesterday" }
+  ]);
 
-  // ----------------------------------------
-  // 3. CORE TRANSACTION & ESCROW LOGIC
-  // ----------------------------------------
-  
-  // User Accepts an item from the Feed
-  const handleAcceptExchange = (post: MarketplacePost) => {
-    if (activeSession) {
-      alert("You already have an active skill-exchange session running!");
-      return;
-    }
+  // --- SIGNUP FORM STATES ---
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupName, setSignupName] = useState('');
+  const [signupGrade, setSignupGrade] = useState('Grade 11');
+  const [signupStrengths, setSignupStrengths] = useState<string[]>([]);
+  const [signupNeeds, setSignupNeeds] = useState<string[]>([]);
 
-    if (post.type === 'Offer') {
-      // Current User is the LEARNER (spending credits)
-      // Escrow Logic: Check if current user has enough balance immediately
-      if (profile.balance < post.cost) {
-        alert("Inadequate Hourglass Credits! Help a peer out first to earn more credits.");
-        return;
-      }
-
-      // Deduct balance from learner immediately to place in Escrow
-      const updatedProfile = { ...profile, balance: profile.balance - post.cost };
-      setProfile(updatedProfile);
-      
-      // Setup Escrow tracking session (Simulating a quick 15-second high-yield workspace)
-      const newSession: EscrowSession = {
-        id: `session-${Date.now()}`,
-        postId: post.id,
-        tutorName: post.studentName,
-        learnerName: profile.name,
-        subject: post.subject,
-        cost: post.cost,
-        durationSeconds: 15, // Using 15 seconds for rapid MVP testing demonstration
-        status: 'active'
-      };
-      
-      setActiveSession(newSession);
-      setTimerLeft(15);
-      setIsTimerRunning(true);
-      
-      // Remove post from feed since it's occupied
-      const updatedPosts = posts.filter(p => p.id !== post.id);
-      setPosts(updatedPosts);
-      saveToStorage(updatedProfile, updatedPosts, transactions);
-
-    } else {
-      // Current User is the TUTOR (earning credits helping someone who requested help)
-      // Since the mock student requested help, we assume their escrow is backed.
-      const newSession: EscrowSession = {
-        id: `session-${Date.now()}`,
-        postId: post.id,
-        tutorName: profile.name, // Current user is tutor
-        learnerName: post.studentName,
-        subject: post.subject,
-        cost: post.cost,
-        durationSeconds: 15,
-        status: 'active'
-      };
-
-      setActiveSession(newSession);
-      setTimerLeft(15);
-      setIsTimerRunning(true);
-
-      const updatedPosts = posts.filter(p => p.id !== post.id);
-      setPosts(updatedPosts);
-      saveToStorage(profile, updatedPosts, transactions);
+  // Helpers to add subjects safely without duplication
+  const addStrength = (subject: string) => {
+    if (subject && !signupStrengths.includes(subject)) {
+      setSignupStrengths([...signupStrengths, subject]);
     }
   };
 
-  // Triggered when user manually ends or clicks "Verify Session"
-  const handleVerifySessionClick = () => {
-    setIsTimerRunning(false);
-    setShowReviewModal(true);
+  const removeStrength = (subject: string) => {
+    setSignupStrengths(signupStrengths.filter(s => s !== subject));
   };
 
-  // Final step: Submit review and allocate currency out of Escrow
-  const handleSubmitReview = (e: React.FormEvent) => {
+  const addNeed = (subject: string) => {
+    if (subject && !signupNeeds.includes(subject)) {
+      setSignupNeeds([...signupNeeds, subject]);
+    }
+  };
+
+  const removeNeed = (subject: string) => {
+    setSignupNeeds(signupNeeds.filter(n => n !== subject));
+  };
+
+  const handleSignupSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeSession) return;
+    if (!signupEmail || !signupName) return;
 
-    let updatedProfile = { ...profile };
-    let updatedTx = [...transactions];
-
-    // If current user acted as the TUTOR, they officially receive the escrowed funds now!
-    if (activeSession.tutorName === profile.name) {
-      updatedProfile.balance += activeSession.cost;
-      
-      const newTx: Transaction = {
-        id: `tx-${Date.now()}`,
-        type: 'earn',
-        amount: activeSession.cost,
-        subject: activeSession.subject,
-        peerName: activeSession.learnerName,
-        timestamp: 'Just now'
-      };
-      updatedTx = [newTx, ...updatedTx];
-    } else {
-      // Current user was the LEARNER (funds were already deducted on start)
-      const newTx: Transaction = {
-        id: `tx-${Date.now()}`,
-        type: 'spend',
-        amount: activeSession.cost,
-        subject: activeSession.subject,
-        peerName: activeSession.tutorName,
-        timestamp: 'Just now'
-      };
-      updatedTx = [newTx, ...updatedTx];
-    }
-
-    setProfile(updatedProfile);
-    setTransactions(updatedTx);
-    saveToStorage(updatedProfile, posts, updatedTx);
-
-    // Clean up interface state
-    setActiveSession(null);
-    setShowReviewModal(false);
-    setComment('');
-    alert("Transaction completed successfully! Credits securely transferred.");
+    setCurrentUser({
+      name: signupName,
+      email: signupEmail,
+      grade: signupGrade,
+      balance: 5.0, 
+      strengths: signupStrengths.length > 0 ? signupStrengths : ["Coding"],
+      needs: signupNeeds.length > 0 ? signupNeeds : ["Advanced Math"]
+    });
   };
 
-  // ----------------------------------------
-  // 4. RENDERING ENGINE (THE DASHBOARD UI)
-  // ----------------------------------------
-  const filteredPosts = posts.filter(post => {
-    if (feedFilter === 'All') return true;
-    return post.type === feedFilter;
-  });
+  // ==========================================
+  // TRANSACTION EXCHANGE HANDSHAKE ENGINE
+  // ==========================================
+  const processDealEngagement = (post: MarketplacePost) => {
+    if (!currentUser) return;
+    if (post.creatorEmail === currentUser.email) return;
+    if (post.type === 'Offer' && currentUser.balance < post.cost) return;
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col md:flex-row antialiased font-sans">
-      
-      {/* SIDEBAR NAVIGATION & PROFILE VIEW */}
-      <aside className="w-full md:w-80 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-6 flex flex-col justify-between shrink-0">
-        <div>
-          {/* Logo */}
-          <div className="flex items-center gap-3 mb-8">
-            <div className="bg-teal-600 text-white p-2.5 rounded-xl shadow-md shadow-teal-100">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
+    setPosts(posts.map(p => p.id === post.id ? { 
+      ...p, 
+      status: 'pending',
+      acceptedByEmail: currentUser.email,
+      acceptedByName: currentUser.name
+    } : p));
+
+    const targetedAnnouncement: AppNotification = {
+      id: `notif-${Date.now()}`,
+      message: `🔔 Match Proposal: ${currentUser.name} wants to confirm your "${post.subject}" exchange. Do you authorize this transaction?`,
+      type: 'request',
+      timestamp: 'Just now',
+      associatedPostId: post.id,
+      targetEmail: post.creatorEmail
+    };
+
+    setNotifications([targetedAnnouncement, ...notifications]);
+  };
+
+  const confirmPendingLesson = (postId: string) => {
+    const targetPost = posts.find(p => p.id === postId);
+    if (!targetPost || !currentUser) return;
+
+    setPosts(posts.map(p => p.id === postId ? { ...p, status: 'confirmed' } : p));
+
+    if (targetPost.type === 'Offer') {
+      if (currentUser.email === targetPost.creatorEmail) {
+        setCurrentUser((prev: UserProfile | null) => prev ? { ...prev, balance: prev.balance + targetPost.cost } : null);
+      }
+    }
+
+    setNotifications(notifications.filter(n => n.associatedPostId !== postId));
+    setIsNotifOpen(false);
+  };
+
+  const handleCreatePost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const newPost: MarketplacePost = {
+      id: `post-${Date.now()}`,
+      studentName: currentUser.name,
+      creatorEmail: currentUser.email,
+      subject: postSubject,
+      tier: postTier,
+      cost: postCost,
+      type: postType,
+      description: postDescription,
+      duration: postDuration,
+      scheduledDay: postSchedule,
+      status: 'open'
+    };
+
+    setPosts([newPost, ...posts]);
+    setIsCreateModalOpen(false);
+    
+    setPostSubject('');
+    setPostDescription('');
+  };
+
+  const toggleActiveUserTestingFrame = () => {
+    if (!currentUser) return;
+    if (currentUser.email === DEFAULT_TEST_ACCOUNT.email) {
+      setCurrentUser(JSON.parse(localStorage.getItem('hourglass_user_b') || '{}'));
+    } else {
+      localStorage.setItem('hourglass_user_b', JSON.stringify(currentUser));
+      setCurrentUser(DEFAULT_TEST_ACCOUNT);
+    }
+  };
+
+  // --- INITIAL SCREEN / SIGNUP VIEW FRAME WITH POP-AND-ADD DROPDOWNS ---
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100 font-sans">
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="bg-teal-50 text-slate-950 font-bold p-2.5 rounded-xl text-xl shadow-lg">⏳</div>
             <div>
-              <h1 className="font-bold text-xl tracking-tight text-slate-900">Hourglass</h1>
-              <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Time Banking Hub</p>
+              <h1 className="text-xl font-black tracking-tight text-white">Welcome to Hourglass</h1>
+              <p className="text-xs text-slate-400 font-medium">High School Peer Time-Banking Network</p>
             </div>
           </div>
 
-          {/* User Profile Info */}
-          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-teal-100 text-teal-700 font-semibold rounded-full flex items-center justify-center text-sm">
-                {profile.name.split(' ').map(n => n[0]).join('')}
-              </div>
-              <div>
-                <h3 className="font-bold text-slate-800 text-sm">{profile.name}</h3>
-                <span className="text-xs px-2 py-0.5 bg-slate-200 text-slate-600 rounded-md font-medium">{profile.grade}</span>
-              </div>
-            </div>
-
-            <div className="space-y-3 mt-4 border-t border-slate-200/60 pt-3">
-              <div>
-                <span className="text-xs font-semibold text-teal-600 uppercase tracking-wider block mb-1">My Strengths (Earns Time)</span>
-                <div className="flex flex-wrap gap-1">
-                  {profile.strengths.map((str, idx) => (
-                    <span key={idx} className="text-xs bg-teal-50 border border-teal-100 text-teal-800 px-2 py-1 rounded-md">{str}</span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <span className="text-xs font-semibold text-indigo-600 uppercase tracking-wider block mb-1">My Needs (Spends Time)</span>
-                <div className="flex flex-wrap gap-1">
-                  {profile.needs.map((nd, idx) => (
-                    <span key={idx} className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-800 px-2 py-1 rounded-md">{nd}</span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-xs text-slate-400 text-center md:text-left border-t border-slate-100 pt-4 mt-4">
-          Peer-to-Peer Academic Banking System &bull; Grades 10-12
-        </div>
-      </aside>
-
-      {/* MAIN MAIN CONTENT CONTAINER */}
-      <main className="flex-1 flex flex-col min-w-0">
-        
-        {/* TOP COMPACT CONTAINER: TIME WALLET WIDGET */}
-        <header className="bg-white border-b border-slate-200 p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Student Dashboard</h2>
-            <p className="text-sm text-slate-500">Deposit time helping others, withdraw it when you need a tutor.</p>
-          </div>
-
-          {/* Financial Wallet Box */}
-          <div className="bg-gradient-to-br from-teal-600 to-emerald-700 text-white rounded-2xl p-4 shadow-xl shadow-teal-900/10 flex items-center gap-4 min-w-[240px]">
-            <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-8 w-8 text-emerald-200 ${isTimerRunning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-            </div>
+          <form onSubmit={handleSignupSubmit} className="space-y-4">
             <div>
-              <p className="text-xs font-medium text-emerald-100 uppercase tracking-wider">Active Balance</p>
-              <h4 className="text-2xl font-extrabold tracking-tight">{profile.balance.toFixed(1)} <span className="text-sm font-normal text-emerald-100">Credits / Hrs</span></h4>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">School Email Account</label>
+              <input 
+                type="email" 
+                placeholder="you@school.edu" 
+                value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-medium text-white placeholder-slate-600 focus:outline-none focus:border-teal-500 transition"
+              />
             </div>
-          </div>
-        </header>
 
-        {/* WORKSPACE MIDDLE BODY */}
-        <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-          
-          {/* INTERACTIVE ESCROW LIVE TRANSACTION VIEW CONTAINER */}
-          {activeSession && (
-            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade-in">
-              <div className="flex items-start gap-3.5">
-                <div className="bg-amber-500 text-white p-3 rounded-xl mt-0.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wide bg-amber-200 text-amber-900 px-2 py-0.5 rounded-md">Live Escrow Session Locked</span>
-                    <span className="text-xs text-amber-700 font-medium">Cost: {activeSession.cost.toFixed(1)} Credits</span>
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-base mt-1">{activeSession.subject}</h3>
-                  <p className="text-xs text-slate-600 mt-0.5">Tutor: <strong className="text-slate-800">{activeSession.tutorName}</strong> &bull; Learner: <strong className="text-slate-800">{activeSession.learnerName}</strong></p>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Full Name</label>
+                <input 
+                  type="text" 
+                  placeholder="Your profile name" 
+                  value={signupName}
+                  onChange={(e) => setSignupName(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-medium text-white placeholder-slate-600 focus:outline-none focus:border-teal-500 transition"
+                />
               </div>
-
-              {/* Live Timer Control Group */}
-              <div className="flex items-center gap-3 self-end md:self-center bg-white border border-amber-200 px-4 py-2 rounded-xl shadow-inner">
-                <div className="text-center">
-                  <span className="text-xs text-slate-400 block font-semibold uppercase tracking-tight">Time Remaining</span>
-                  <span className="font-mono text-xl font-bold text-slate-800">{formatTime(timerLeft)}</span>
-                </div>
-                
-                {activeSession.status === 'active' ? (
-                  <button 
-                    onClick={handleVerifySessionClick} 
-                    className="bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition"
-                  >
-                    End & Verify
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => setShowReviewModal(true)} 
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition animate-pulse"
-                  >
-                    Confirm & Release
-                  </button>
-                )}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Grade Level</label>
+                <select 
+                  value={signupGrade}
+                  onChange={(e) => setSignupGrade(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-medium text-white focus:outline-none focus:border-teal-500 transition"
+                >
+                  <option>Grade 9</option>
+                  <option>Grade 10</option>
+                  <option>Grade 11</option>
+                  <option>Grade 12</option>
+                </select>
               </div>
             </div>
-          )}
 
-          {/* LOWER TWO COLUMN GRID: MARKETPLACE vs LOGS */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            
-            {/* COLUMN 1 & 2: DYNAMIC DECENTRALIZED MARKETPLACE FEED */}
-            <div className="xl:col-span-2 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <h3 className="font-bold text-slate-900 text-lg">Decentralized Marketplace Feed</h3>
-                
-                {/* Filters */}
-                <div className="bg-slate-200/70 p-1 rounded-xl flex gap-1">
-                  {(['All', 'Offer', 'Request'] as const).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setFeedFilter(type)}
-                      className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${feedFilter === type ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-                    >
-                      {type === 'All' ? 'Browse All' : type === 'Offer' ? 'Browse Offers' : 'Browse Requests'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Feed Content Cards */}
-              <div className="space-y-3">
-                {filteredPosts.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">No exchange slots listed inside this filter category right now.</p>
+            {/* STRENGTHS SELECTION (CLICK TO ADD LIST) */}
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">My Strengths (Topics you can teach)</label>
+              <select 
+                value=""
+                onChange={(e) => { addStrength(e.target.value); e.target.value = ""; }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-medium text-white focus:outline-none focus:border-teal-500 transition"
+              >
+                <option value="" disabled>-- Click a topic to add --</option>
+                {SUBJECT_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              
+              {/* Added Strengths Display */}
+              <div className="flex flex-wrap gap-1.5 mt-2 min-h-6">
+                {signupStrengths.length === 0 ? (
+                  <span className="text-[10px] text-slate-600 italic">No strengths selected yet</span>
                 ) : (
-                  filteredPosts.map((post) => (
-                    <div key={post.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:border-slate-300 transition flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                      <div className="space-y-1.5 max-w-xl">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className={`text-[11px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md ${post.type === 'Offer' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-indigo-50 border border-indigo-200 text-indigo-800'}`}>
-                            {post.type === 'Offer' ? 'Available Offer' : 'Help Requested'}
-                          </span>
-                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${post.tier === 'Advanced' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-slate-100 text-slate-600'}`}>
-                            {post.tier} Tier ({post.cost.toFixed(1)}/hr)
-                          </span>
-                          <span className="text-xs text-slate-400 font-medium">Listed by {post.studentName}</span>
-                        </div>
-                        <h4 className="font-bold text-slate-900 text-base">{post.subject}</h4>
-                        <p className="text-sm text-slate-500 leading-relaxed">{post.description}</p>
-                      </div>
-
-                      {/* Action Button */}
-                      <button
-                        onClick={() => handleAcceptExchange(post)}
-                        className={`sm:shrink-0 px-4 py-2.5 rounded-xl font-bold text-xs shadow-sm transition ${
-                          post.type === 'Offer' 
-                            ? 'bg-teal-600 hover:bg-teal-700 text-white' 
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                        }`}
-                      >
-                        Accept Exchange ({post.cost.toFixed(1)} Credits)
-                      </button>
-                    </div>
+                  signupStrengths.map(s => (
+                    <span key={s} className="bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                      {s}
+                      <button type="button" onClick={() => removeStrength(s)} className="text-rose-400 hover:text-rose-300 font-extrabold ml-1">×</button>
+                    </span>
                   ))
                 )}
               </div>
             </div>
 
-            {/* COLUMN 3: HISTORICAL TRANSACTION LOG */}
-            <div className="space-y-4">
-              <div className="border-b border-slate-200 pb-3">
-                <h3 className="font-bold text-slate-900 text-lg">Ledger Transactions Log</h3>
+            {/* NEEDS SELECTION (CLICK TO ADD LIST) */}
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">My Needs (Topics you want help with)</label>
+              <select 
+                value=""
+                onChange={(e) => { addNeed(e.target.value); e.target.value = ""; }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs font-medium text-white focus:outline-none focus:border-teal-500 transition"
+              >
+                <option value="" disabled>-- Click a topic to add --</option>
+                {SUBJECT_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+
+              {/* Added Needs Display */}
+              <div className="flex flex-wrap gap-1.5 mt-2 min-h-6">
+                {signupNeeds.length === 0 ? (
+                  <span className="text-[10px] text-slate-600 italic">No needs selected yet</span>
+                ) : (
+                  signupNeeds.map(n => (
+                    <span key={n} className="bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                      {n}
+                      <button type="button" onClick={() => removeNeed(n)} className="text-rose-400 hover:text-rose-300 font-extrabold ml-1">×</button>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full mt-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:brightness-110 text-slate-950 font-black text-xs p-3 rounded-xl transition shadow-lg active:scale-[0.98]"
+            >
+              Initialize Profile Session & Enter Dashboard
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredPosts = posts.filter(p => feedFilter === 'All' || p.type === feedFilter);
+
+  // --- MAIN DASHBOARD VIEW FRAME ---
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-teal-500/20 pb-12">
+      <header className="bg-white border-b border-slate-200/80 sticky top-0 z-40 shadow-xs">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl bg-slate-950 text-white p-1.5 rounded-xl">⏳</span>
+            <div>
+              <span className="font-black text-slate-950 tracking-tight text-base block">Hourglass</span>
+              <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Credit Hub</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={toggleActiveUserTestingFrame}
+              className="text-[10px] bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-xl transition"
+            >
+              🔄 Simulation Swap User Frame
+            </button>
+
+            <div className="relative">
+              <button 
+                onClick={() => setIsNotifOpen(!isNotifOpen)}
+                className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl relative transition"
+              >
+                <span>🔔</span>
+                {notifications.filter(n => n.targetEmail === currentUser.email).length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-500 w-2.5 h-2.5 rounded-full ring-2 ring-white animate-bounce" />
+                )}
+              </button>
+
+              {isNotifOpen && (
+                <div className="absolute right-0 mt-3 w-80 bg-slate-900 border border-slate-800 shadow-2xl rounded-2xl p-4 text-xs z-50 text-slate-100 animate-in fade-in duration-150">
+                  <h3 className="font-bold border-b border-slate-800 pb-2.5 mb-2.5 flex justify-between items-center">
+                    <span className="flex items-center gap-1.5 font-black text-white">
+                      <span className="text-teal-400">⏳</span> Real-Time Action Desk
+                    </span>
+                    <button onClick={() => setIsNotifOpen(false)} className="text-[10px] bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 px-2 py-0.5 rounded-md font-bold transition">Close</button>
+                  </h3>
+                  
+                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+                    {notifications.filter(n => n.targetEmail === currentUser.email).length === 0 ? (
+                      <div className="text-center py-6 text-slate-500 italic">
+                        No pending ledger actions for your account.
+                      </div>
+                    ) : (
+                      notifications
+                        .filter(n => n.targetEmail === currentUser.email)
+                        .map(notif => {
+                          const targetPost = posts.find(p => p.id === notif.associatedPostId);
+
+                          return (
+                            <div key={notif.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 flex flex-col gap-2.5">
+                              <p className="text-slate-300 leading-normal font-medium text-[11px]">{notif.message}</p>
+                              <div className="flex justify-between items-center pt-2 border-t border-slate-800/60">
+                                <span className="text-[9px] text-slate-500 font-mono">{notif.timestamp}</span>
+                                {targetPost && (
+                                  <button
+                                    onClick={() => confirmPendingLesson(targetPost.id)}
+                                    className="bg-gradient-to-r from-teal-500 to-emerald-500 hover:brightness-110 text-slate-950 text-[10px] px-3 py-1.5 rounded-lg font-bold shadow-md transition duration-150 active:scale-95"
+                                  >
+                                    Authorize Match & Lock 🚀
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-950 text-white rounded-xl px-3 py-1.5 flex items-center gap-2 border border-slate-800">
+              <span className="text-teal-400 text-xs font-mono font-bold">💳</span>
+              <div className="text-right">
+                <span className="text-[9px] block uppercase font-bold tracking-wider text-slate-500 leading-none">Balance</span>
+                <span className="text-xs font-black text-emerald-400 font-mono">{currentUser.balance.toFixed(1)} <span className="text-[10px] text-slate-400">Hrs</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 mt-8">
+        {posts.some(p => p.status === 'confirmed' && (p.creatorEmail === currentUser.email || p.acceptedByEmail === currentUser.email)) && (
+          <div className="w-full mb-6 bg-gradient-to-r from-teal-950 to-slate-950 border border-teal-500/30 rounded-2xl p-4 flex items-center justify-between shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="bg-teal-500/20 p-2.5 rounded-xl text-xl">🎉</div>
+              <div>
+                <h4 className="text-xs font-black text-white uppercase tracking-wider">Ledger Lock Established</h4>
+                <p className="text-[11px] text-slate-300 font-medium mt-0.5">
+                  The mutual exchange loop is fully authorized! Your peer lesson is <span className="text-teal-400 font-bold">Ready & Starting Soon</span>.
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setPosts(posts.filter(p => p.status !== 'confirmed'))}
+              className="text-[10px] bg-teal-500/10 text-teal-400 hover:bg-teal-500 hover:text-slate-950 font-bold px-3 py-1.5 rounded-xl transition"
+            >
+              Dismiss System Log
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* VISUALLY CONTRASTED SLATE PROFILE SIDEBAR BAR CARD */}
+          <div className="lg:col-span-3 space-y-6">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md text-slate-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center font-black text-white text-sm border border-slate-700">
+                  {currentUser.name.substring(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h2 className="font-bold text-sm text-white">{currentUser.name}</h2>
+                  <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">{currentUser.grade}</span>
+                </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 divide-y divide-slate-100 shadow-sm">
-                {transactions.map((tx) => (
-                  <div key={tx.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <h5 className="font-bold text-slate-800 text-xs truncate">{tx.subject}</h5>
-                      <p className="text-[11px] text-slate-400 truncate">{tx.type === 'earn' ? 'Earned via' : 'Paid to'} {tx.peerName} &bull; {tx.timestamp}</p>
+              <div className="space-y-3.5 pt-3 border-t border-slate-800 text-[11px]">
+                <div>
+                  <span className="block font-bold uppercase text-slate-400 mb-1">My Strengths (Earns Time)</span>
+                  <div className="flex flex-wrap gap-1">
+                    {currentUser.strengths.map((s: string) => (
+                      <span key={s} className="bg-teal-500/10 text-teal-300 border border-teal-500/20 px-2 py-0.5 rounded-md font-medium">{s}</span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <span className="block font-bold uppercase text-slate-400 mb-1">My Needs (Spends Time)</span>
+                  <div className="flex flex-wrap gap-1">
+                    {currentUser.needs.map((n: string) => (
+                      <span key={n} className="bg-rose-500/10 text-rose-300 border border-rose-500/20 px-2 py-0.5 rounded-md font-medium">{n}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* MAIN EXCHANGE PUBLIC CATALOG FEED AREA */}
+          <div className="lg:col-span-6 space-y-4">
+            <div className="flex justify-between items-center bg-white p-3 border border-slate-200/80 rounded-2xl shadow-xs">
+              <div className="flex gap-1">
+                {(['All', 'Offer', 'Request'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setFeedFilter(tab)}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${feedFilter === tab ? 'bg-slate-950 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'}`}
+                  >
+                    {tab === 'All' ? 'All Feed' : tab === 'Offer' ? 'Browse Offers' : 'Help Requests'}
+                  </button>
+                ))}
+              </div>
+
+              <button 
+                onClick={() => setIsCreateModalOpen(true)}
+                className="bg-teal-600 hover:bg-teal-500 text-white text-xs font-black px-3 py-2 rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              >
+                <span>➕</span> Create Listing
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {filteredPosts.map(post => {
+                const isOwnPost = post.creatorEmail === currentUser.email;
+
+                return (
+                  <div key={post.id} className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-slate-300 transition relative overflow-hidden">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${post.type === 'Offer' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
+                          {post.type === 'Offer' ? 'Available Offer' : 'Help Requested'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium ml-2">Listed by {post.studentName} {isOwnPost && '(You)'}</span>
+                      </div>
+                      <span className="text-xs font-bold font-mono text-slate-950 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg">
+                        🪙 {post.cost.toFixed(1)} Credits
+                      </span>
                     </div>
-                    <span className={`text-xs font-bold font-mono shrink-0 px-2 py-0.5 rounded-md ${tx.type === 'earn' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+
+                    <h3 className="font-black text-slate-950 text-sm mb-1">{post.subject}</h3>
+                    <p className="text-xs text-slate-500 font-medium leading-relaxed mb-4">{post.description}</p>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-[10px] font-bold text-slate-500">
+                      <div className="flex gap-4">
+                        <span>⏱️ {post.duration}</span>
+                        <span>📅 {post.scheduledDay}</span>
+                      </div>
+
+                      {post.status === 'open' && (
+                        <button
+                          onClick={() => processDealEngagement(post)}
+                          disabled={isOwnPost}
+                          className={`text-[10px] font-bold px-3 py-1.5 rounded-xl transition ${isOwnPost ? 'bg-slate-50 text-slate-300 cursor-not-allowed border border-slate-100' : 'bg-slate-950 hover:bg-teal-600 hover:text-white text-white shadow-xs'}`}
+                        >
+                          {isOwnPost ? 'Monitoring Loop' : post.type === 'Offer' ? 'Book Lesson' : 'Accept Exchange'}
+                        </button>
+                      )}
+
+                      {post.status === 'pending' && (
+                        <span className="text-[10px] text-amber-600 font-black uppercase tracking-wider bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg animate-pulse">
+                          Pending Auth...
+                        </span>
+                      )}
+
+                      {post.status === 'confirmed' && (
+                        <span className="text-[10px] text-teal-600 font-black uppercase tracking-wider bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-lg">
+                          Locked & Ready
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* LEDGER LOG COLUMN BLOCK */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
+              <h3 className="font-black text-slate-950 text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5 mb-3 flex items-center gap-1.5">
+                <span>📊</span> Ledger Transactions Log
+              </h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {transactions.map(tx => (
+                  <div key={tx.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-[11px] flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-slate-900 leading-tight">{tx.details}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5">Peer: {tx.peer} • {tx.timestamp}</p>
+                    </div>
+                    <span className={`font-mono font-bold ${tx.type === 'earn' ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {tx.type === 'earn' ? '+' : '-'}{tx.amount.toFixed(1)}
                     </span>
                   </div>
                 ))}
               </div>
             </div>
-
           </div>
         </div>
       </main>
 
-      {/* COMPLIANCE ESCROW QUALITY CONTROL MODAL */}
-      {showReviewModal && activeSession && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <form onSubmit={handleSubmitReview} className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 animate-scale-up space-y-4">
-            <div className="text-center space-y-1.5">
-              <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto text-xl">🏆</div>
-              <h3 className="text-lg font-bold text-slate-900">Verify & Complete Session</h3>
-              <p className="text-xs text-slate-500">Rate your experience. Confirming this step authorizes the ledger to release escrow security directly into the tutor's active time wallet balance.</p>
-            </div>
-
-            {/* Star Picker Selection */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-400 block text-center">Tutor Rating (Quality Control)</label>
-              <div className="flex justify-center gap-2">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    type="button"
-                    key={star}
-                    onClick={() => setRating(star)}
-                    className={`text-2xl transition ${star <= rating ? 'text-amber-400 scale-110' : 'text-slate-200'}`}
-                  >
-                    ★
-                  </button>
-                ))}
+      {/* NEW POST REGISTRATION MODAL PANEL AREA */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-5 shadow-2xl transform animate-in zoom-in-95 duration-150">
+            <h3 className="text-sm font-black text-slate-950 uppercase tracking-wider border-b border-slate-100 pb-3 mb-4">
+              Publish New Exchange Loop
+            </h3>
+            
+            <form onSubmit={handleCreatePost} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Listing Intention</label>
+                  <select value={postType} onChange={(e) => setPostType(e.target.value as 'Offer' | 'Request')} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600">
+                    <option value="Offer">Offer to Teach (Earns Credits)</option>
+                    <option value="Request">Request Help (Costs Credits)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Exchange Subject Name</label>
+                  <input type="text" placeholder="e.g., Coding Basics, Advanced Math" value={postSubject} onChange={(e) => setPostSubject(e.target.value)} required className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600" />
+                </div>
               </div>
-            </div>
 
-            {/* Commments Block */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Feedback / Comments</label>
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Optional notes on how the peer-exchange session went..."
-                className="w-full border border-slate-200 rounded-xl p-3 text-xs bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 h-20 resize-none"
-              />
-            </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Ledger Tier</label>
+                  <select value={postTier} onChange={(e) => setPostTier(e.target.value as 'Standard' | 'Advanced')} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600">
+                    <option value="Standard">Standard Tier</option>
+                    <option value="Advanced">Advanced Tier</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Credit Cost</label>
+                  <input type="number" step="0.5" min="0.5" value={postCost} onChange={(e) => setPostCost(parseFloat(e.target.value))} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-mono font-bold focus:outline-none focus:border-teal-600" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Schedule Frame</label>
+                  <input type="text" value={postSchedule} onChange={(e) => setPostSchedule(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600" />
+                </div>
+              </div>
 
-            {/* Action Triggers */}
-            <div className="flex gap-2 pt-2">
-              <button
-                type="submit"
-                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-md shadow-teal-700/10"
-              >
-                Submit Review & Release Funds
-              </button>
-            </div>
-          </form>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Public Description Details</label>
+                <textarea 
+                  rows={2}
+                  placeholder="Provide context for classmates reading this public catalog posting..."
+                  value={postDescription} 
+                  onChange={(e) => setPostDescription(e.target.value)}
+                  required
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600 resize-none"
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2 border-t">
+                <button 
+                  type="button" 
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-1.5 rounded-xl font-bold transition"
+                >
+                  Publish Listing
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
-
     </div>
   );
 }
