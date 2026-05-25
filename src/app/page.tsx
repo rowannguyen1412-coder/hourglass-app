@@ -1,11 +1,53 @@
 'use client';
 
 import { useState } from 'react';
-import { UserProfile, MarketplacePost, AppNotification, Transaction } from '../types';
 
 // ==========================================
-// ACCOUNT A CONFIGURATION (FALLBACK SEED)
+// INTERNAL TYPE DEFINITIONS (MATCHES TYPES.TS)
 // ==========================================
+interface UserProfile {
+  name: string;
+  email: string;
+  grade: string;
+  balance: number;
+  strengths: string[];
+  needs: string[];
+}
+
+interface MarketplacePost {
+  id: string;
+  studentName: string;
+  creatorEmail: string;
+  subject: string;
+  tier: 'Standard' | 'Advanced';
+  cost: number;
+  type: 'Offer' | 'Request';
+  description: string;
+  duration: string;
+  scheduledDay: string;
+  status: 'open' | 'pending' | 'confirmed';
+  acceptedByEmail?: string;
+  acceptedByName?: string;
+}
+
+interface AppNotification {
+  id: string;
+  message: string;
+  type: 'request' | 'alert';
+  timestamp: string;
+  associatedPostId: string;
+  targetEmail: string;
+}
+
+interface Transaction {
+  id: string;
+  details: string;
+  type: 'earn' | 'spend';
+  amount: number;
+  peer: string;
+  timestamp: string;
+}
+
 const DEFAULT_TEST_ACCOUNT: UserProfile = {
   name: "Alex Rivera",
   email: "alex@school.edu",
@@ -15,7 +57,6 @@ const DEFAULT_TEST_ACCOUNT: UserProfile = {
   needs: ["Physics Basics", "History Review"]
 };
 
-// AVAILABLE PRESET SUBJECTS FOR DROPDOWN
 const SUBJECT_OPTIONS = [
   "Advanced Math",
   "Coding",
@@ -74,7 +115,7 @@ export default function HourglassDashboard() {
   ]);
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([
+  const [transactions] = useState<Transaction[]>([
     { id: "tx-1", details: "Basic Photography Setup", type: "earn", amount: 1.0, peer: "Leo Cooper", timestamp: "2 hours ago" },
     { id: "tx-2", details: "History Review Session", type: "spend", amount: 1.5, peer: "Emily Blunt", timestamp: "Yesterday" }
   ]);
@@ -86,7 +127,6 @@ export default function HourglassDashboard() {
   const [signupStrengths, setSignupStrengths] = useState<string[]>([]);
   const [signupNeeds, setSignupNeeds] = useState<string[]>([]);
 
-  // Helpers to add subjects safely without duplication
   const addStrength = (subject: string) => {
     if (subject && !signupStrengths.includes(subject)) {
       setSignupStrengths([...signupStrengths, subject]);
@@ -121,9 +161,6 @@ export default function HourglassDashboard() {
     });
   };
 
-  // ==========================================
-  // TRANSACTION EXCHANGE HANDSHAKE ENGINE
-  // ==========================================
   const processDealEngagement = (post: MarketplacePost) => {
     if (!currentUser) return;
     if (post.creatorEmail === currentUser.email) return;
@@ -199,13 +236,18 @@ export default function HourglassDashboard() {
     }
   };
 
-  // --- INITIAL SCREEN / SIGNUP VIEW FRAME WITH POP-AND-ADD DROPDOWNS ---
+  // --- INITIAL SCREEN / SIGNUP VIEW FRAME ---
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-slate-100 font-sans">
         <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl">
+          
           <div className="flex items-center gap-3 mb-5">
-            <div className="bg-teal-50 text-slate-950 font-bold p-2.5 rounded-xl text-xl shadow-lg">⏳</div>
+            <img 
+              src="/logo.png" 
+              alt="Hourglass Logo" 
+              className="w-12 h-12 rounded-xl object-cover shadow-lg border border-slate-800"
+            />
             <div>
               <h1 className="text-xl font-black tracking-tight text-white">Welcome to Hourglass</h1>
               <p className="text-xs text-slate-400 font-medium">High School Peer Time-Banking Network</p>
@@ -252,7 +294,6 @@ export default function HourglassDashboard() {
               </div>
             </div>
 
-            {/* STRENGTHS SELECTION (CLICK TO ADD LIST) */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">My Strengths (Topics you can teach)</label>
               <select 
@@ -266,7 +307,6 @@ export default function HourglassDashboard() {
                 ))}
               </select>
               
-              {/* Added Strengths Display */}
               <div className="flex flex-wrap gap-1.5 mt-2 min-h-6">
                 {signupStrengths.length === 0 ? (
                   <span className="text-[10px] text-slate-600 italic">No strengths selected yet</span>
@@ -281,7 +321,6 @@ export default function HourglassDashboard() {
               </div>
             </div>
 
-            {/* NEEDS SELECTION (CLICK TO ADD LIST) */}
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">My Needs (Topics you want help with)</label>
               <select 
@@ -295,7 +334,6 @@ export default function HourglassDashboard() {
                 ))}
               </select>
 
-              {/* Added Needs Display */}
               <div className="flex flex-wrap gap-1.5 mt-2 min-h-6">
                 {signupNeeds.length === 0 ? (
                   <span className="text-[10px] text-slate-600 italic">No needs selected yet</span>
@@ -330,7 +368,11 @@ export default function HourglassDashboard() {
       <header className="bg-white border-b border-slate-200/80 sticky top-0 z-40 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="text-2xl bg-slate-950 text-white p-1.5 rounded-xl">⏳</span>
+            <img 
+              src="/logo.png" 
+              alt="Hourglass Logo" 
+              className="w-9 h-9 rounded-lg object-cover border border-slate-200"
+            />
             <div>
               <span className="font-black text-slate-950 tracking-tight text-base block">Hourglass</span>
               <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Credit Hub</span>
@@ -368,7 +410,7 @@ export default function HourglassDashboard() {
                   <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
                     {notifications.filter(n => n.targetEmail === currentUser.email).length === 0 ? (
                       <div className="text-center py-6 text-slate-500 italic">
-                        No pending ledger actions for your account.
+                        No pending actions for your account.
                       </div>
                     ) : (
                       notifications
@@ -432,7 +474,6 @@ export default function HourglassDashboard() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* VISUALLY CONTRASTED SLATE PROFILE SIDEBAR BAR CARD */}
           <div className="lg:col-span-3 space-y-6">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md text-slate-100">
               <div className="flex items-center gap-3 mb-4">
@@ -466,7 +507,6 @@ export default function HourglassDashboard() {
             </div>
           </div>
 
-          {/* MAIN EXCHANGE PUBLIC CATALOG FEED AREA */}
           <div className="lg:col-span-6 space-y-4">
             <div className="flex justify-between items-center bg-white p-3 border border-slate-200/80 rounded-2xl shadow-xs">
               <div className="flex gap-1">
@@ -476,7 +516,7 @@ export default function HourglassDashboard() {
                     onClick={() => setFeedFilter(tab)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${feedFilter === tab ? 'bg-slate-950 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'}`}
                   >
-                    {tab === 'All' ? 'All Feed' : tab === 'Offer' ? 'Browse Offers' : 'Help Requests'}
+                    {tab === 'All' ? 'All Feed' : tab === 'Offer' ? 'Available Offers' : 'Help Requests'}
                   </button>
                 ))}
               </div>
@@ -544,11 +584,10 @@ export default function HourglassDashboard() {
             </div>
           </div>
 
-          {/* LEDGER LOG COLUMN BLOCK */}
           <div className="lg:col-span-3 space-y-4">
             <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
               <h3 className="font-black text-slate-950 text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5 mb-3 flex items-center gap-1.5">
-                <span>📊</span> Ledger Transactions Log
+                <span>📊</span> History Log
               </h3>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {transactions.map(tx => (
@@ -568,7 +607,6 @@ export default function HourglassDashboard() {
         </div>
       </main>
 
-      {/* NEW POST REGISTRATION MODAL PANEL AREA */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-md p-5 shadow-2xl transform animate-in zoom-in-95 duration-150">
