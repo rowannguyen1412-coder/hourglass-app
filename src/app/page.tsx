@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 // ==========================================
-// INTERNAL TYPE DEFINITIONS (MATCHES TYPES.TS)
+// INTERNAL TYPE DEFINITIONS 
 // ==========================================
 interface UserProfile {
   name: string;
@@ -26,8 +26,8 @@ interface MarketplacePost {
   duration: string;
   scheduledDay: string;
   status: 'open' | 'pending' | 'confirmed';
-  acceptedByEmail?: string;
-  acceptedByName?: string;
+  maxCapacity: number; // 1 for 1-on-1, or up to 5 for groups
+  acceptedEmails: string[]; // Tracks everyone who accepted this slot
 }
 
 interface AppNotification {
@@ -83,6 +83,7 @@ export default function HourglassDashboard() {
   const [postDescription, setPostDescription] = useState('');
   const [postDuration, setPostDuration] = useState('60 Mins (Standard)');
   const [postSchedule, setPostSchedule] = useState('Monday afternoon');
+  const [postCapacity, setPostCapacity] = useState<number>(1); // Default to 1-on-1
 
   // --- MOCK DATABASE COLLECTIONS ---
   const [posts, setPosts] = useState<MarketplacePost[]>([
@@ -97,7 +98,9 @@ export default function HourglassDashboard() {
       description: "Struggling with speed and acceleration formulas. Need someone to go over the practice worksheet with me!",
       duration: "60 Mins (Standard)",
       scheduledDay: "Friday afternoon",
-      status: "open"
+      status: "open",
+      maxCapacity: 1,
+      acceptedEmails: []
     },
     {
       id: "post-2",
@@ -110,7 +113,9 @@ export default function HourglassDashboard() {
       description: "I can teach quick rules for optimization problems. Clear examples provided.",
       duration: "60 Mins (Standard)",
       scheduledDay: "Monday afternoon",
-      status: "open"
+      status: "open",
+      maxCapacity: 3, // Group session example
+      acceptedEmails: []
     }
   ]);
 
@@ -164,18 +169,21 @@ export default function HourglassDashboard() {
   const processDealEngagement = (post: MarketplacePost) => {
     if (!currentUser) return;
     if (post.creatorEmail === currentUser.email) return;
+    if (post.acceptedEmails.includes(currentUser.email)) return; // Already joined
     if (post.type === 'Offer' && currentUser.balance < post.cost) return;
+
+    const updatedAcceptedEmails = [...post.acceptedEmails, currentUser.email];
+    const isFull = updatedAcceptedEmails.length >= post.maxCapacity;
 
     setPosts(posts.map(p => p.id === post.id ? { 
       ...p, 
-      status: 'pending',
-      acceptedByEmail: currentUser.email,
-      acceptedByName: currentUser.name
+      acceptedEmails: updatedAcceptedEmails,
+      status: isFull ? 'pending' : 'open' // Changes to pending once last slot is filled
     } : p));
 
     const targetedAnnouncement: AppNotification = {
       id: `notif-${Date.now()}`,
-      message: `🔔 Match Proposal: ${currentUser.name} wants to confirm your "${post.subject}" exchange. Do you authorize this transaction?`,
+      message: `🔔 Match Proposal: ${currentUser.name} joined your "${post.subject}" exchange. (${updatedAcceptedEmails.length}/${post.maxCapacity} slots filled)`,
       type: 'request',
       timestamp: 'Just now',
       associatedPostId: post.id,
@@ -193,7 +201,7 @@ export default function HourglassDashboard() {
 
     if (targetPost.type === 'Offer') {
       if (currentUser.email === targetPost.creatorEmail) {
-        setCurrentUser((prev: UserProfile | null) => prev ? { ...prev, balance: prev.balance + targetPost.cost } : null);
+        setCurrentUser((prev: UserProfile | null) => prev ? { ...prev, balance: prev.balance + (targetPost.cost * targetPost.acceptedEmails.length) } : null);
       }
     }
 
@@ -216,7 +224,9 @@ export default function HourglassDashboard() {
       description: postDescription,
       duration: postDuration,
       scheduledDay: postSchedule,
-      status: 'open'
+      status: 'open',
+      maxCapacity: postCapacity,
+      acceptedEmails: []
     };
 
     setPosts([newPost, ...posts]);
@@ -224,6 +234,7 @@ export default function HourglassDashboard() {
     
     setPostSubject('');
     setPostDescription('');
+    setPostCapacity(1);
   };
 
   const toggleActiveUserTestingFrame = () => {
@@ -410,7 +421,7 @@ export default function HourglassDashboard() {
                   <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
                     {notifications.filter(n => n.targetEmail === currentUser.email).length === 0 ? (
                       <div className="text-center py-6 text-slate-500 italic">
-                        No pending actions for your account.
+                        No pending ledger actions for your account.
                       </div>
                     ) : (
                       notifications
@@ -453,7 +464,7 @@ export default function HourglassDashboard() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 mt-8">
-        {posts.some(p => p.status === 'confirmed' && (p.creatorEmail === currentUser.email || p.acceptedByEmail === currentUser.email)) && (
+        {posts.some(p => p.status === 'confirmed' && (p.creatorEmail === currentUser.email || p.acceptedEmails.includes(currentUser.email))) && (
           <div className="w-full mb-6 bg-gradient-to-r from-teal-950 to-slate-950 border border-teal-500/30 rounded-2xl p-4 flex items-center justify-between shadow-xl">
             <div className="flex items-center gap-3">
               <div className="bg-teal-500/20 p-2.5 rounded-xl text-xl">🎉</div>
@@ -516,7 +527,7 @@ export default function HourglassDashboard() {
                     onClick={() => setFeedFilter(tab)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-xl transition ${feedFilter === tab ? 'bg-slate-950 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'}`}
                   >
-                    {tab === 'All' ? 'All Feed' : tab === 'Offer' ? 'Available Offers' : 'Help Requests'}
+                    {tab === 'All' ? 'All Feed' : tab === 'Offer' ? 'Browse Offers' : 'Help Requests'}
                   </button>
                 ))}
               </div>
@@ -532,6 +543,8 @@ export default function HourglassDashboard() {
             <div className="space-y-4">
               {filteredPosts.map(post => {
                 const isOwnPost = post.creatorEmail === currentUser.email;
+                const hasJoined = post.acceptedEmails.includes(currentUser.email);
+                const isFull = post.acceptedEmails.length >= post.maxCapacity;
 
                 return (
                   <div key={post.id} className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:border-slate-300 transition relative overflow-hidden">
@@ -542,9 +555,14 @@ export default function HourglassDashboard() {
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium ml-2">Listed by {post.studentName} {isOwnPost && '(You)'}</span>
                       </div>
-                      <span className="text-xs font-bold font-mono text-slate-950 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg">
-                        🪙 {post.cost.toFixed(1)} Credits
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-slate-100 border text-slate-600 px-2 py-0.5 rounded font-bold">
+                          👥 {post.acceptedEmails.length}/{post.maxCapacity} Slots
+                        </span>
+                        <span className="text-xs font-bold font-mono text-slate-950 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg">
+                          🪙 {post.cost.toFixed(1)} Credits
+                        </span>
+                      </div>
                     </div>
 
                     <h3 className="font-black text-slate-950 text-sm mb-1">{post.subject}</h3>
@@ -556,20 +574,30 @@ export default function HourglassDashboard() {
                         <span>📅 {post.scheduledDay}</span>
                       </div>
 
-                      {post.status === 'open' && (
+                      {/* POST LIFECYCLE MANAGEMENT DESK */}
+                      {post.status === 'open' && !isFull && (
                         <button
                           onClick={() => processDealEngagement(post)}
-                          disabled={isOwnPost}
-                          className={`text-[10px] font-bold px-3 py-1.5 rounded-xl transition ${isOwnPost ? 'bg-slate-50 text-slate-300 cursor-not-allowed border border-slate-100' : 'bg-slate-950 hover:bg-teal-600 hover:text-white text-white shadow-xs'}`}
+                          disabled={isOwnPost || hasJoined}
+                          className={`text-[10px] font-bold px-3 py-1.5 rounded-xl transition ${isOwnPost ? 'bg-slate-50 text-slate-300 cursor-not-allowed border border-slate-100' : hasJoined ? 'bg-amber-100 text-amber-700 cursor-not-allowed' : 'bg-slate-950 hover:bg-teal-600 hover:text-white text-white shadow-xs'}`}
                         >
-                          {isOwnPost ? 'Monitoring Loop' : post.type === 'Offer' ? 'Book Lesson' : 'Accept Exchange'}
+                          {isOwnPost ? 'Monitoring Loop' : hasJoined ? 'Joined Slot' : post.type === 'Offer' ? 'Book Lesson' : 'Accept Exchange'}
                         </button>
                       )}
 
-                      {post.status === 'pending' && (
-                        <span className="text-[10px] text-amber-600 font-black uppercase tracking-wider bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg animate-pulse">
-                          Pending Auth...
-                        </span>
+                      {(post.status === 'pending' || isFull) && post.status !== 'confirmed' && (
+                        isOwnPost || hasJoined ? (
+                          <span className="text-[10px] text-amber-600 font-black uppercase tracking-wider bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg animate-pulse">
+                            Pending Auth...
+                          </span>
+                        ) : (
+                          <button
+                            className="text-[10px] font-bold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                            disabled
+                          >
+                            In Negotiation
+                          </button>
+                        )
                       )}
 
                       {post.status === 'confirmed' && (
@@ -587,7 +615,7 @@ export default function HourglassDashboard() {
           <div className="lg:col-span-3 space-y-4">
             <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
               <h3 className="font-black text-slate-950 text-xs uppercase tracking-wider border-b border-slate-100 pb-2.5 mb-3 flex items-center gap-1.5">
-                <span>📊</span> History Log
+                <span>📊</span> Ledger Transactions Log
               </h3>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {transactions.map(tx => (
@@ -645,6 +673,22 @@ export default function HourglassDashboard() {
                   <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Schedule Frame</label>
                   <input type="text" value={postSchedule} onChange={(e) => setPostSchedule(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600" />
                 </div>
+              </div>
+
+              {/* NEW: CLASS CAPACITY SELECTOR FIELD */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Class Structure & Capacity</label>
+                <select 
+                  value={postCapacity} 
+                  onChange={(e) => setPostCapacity(parseInt(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-medium focus:outline-none focus:border-teal-600"
+                >
+                  <option value={1}>1-on-1 Private Session (1 Slot)</option>
+                  <option value={2}>Small Study Pair (2 Slots)</option>
+                  <option value={3}>Group Session (3 Slots)</option>
+                  <option value={4}>Group Session (4 Slots)</option>
+                  <option value={5}>Large Group Seminar (5 Slots)</option>
+                </select>
               </div>
 
               <div>
